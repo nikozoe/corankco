@@ -19,7 +19,8 @@ class PairwiseBasedAlgorithm:
     def pairwise_cost_matrix_generic(positions: ndarray,
                                      scoring_scheme: ScoringScheme,
                                      callback: Callable[[ndarray, int, int, Any], Any],
-                                     structure: Any
+                                     structure: Any,
+                                     weights=None
                                      ) -> ndarray:
         """
         Computes the pairwise cost matrix, and allows for calling a function for each pair of elements after computing
@@ -53,25 +54,42 @@ class PairwiseBasedAlgorithm:
             e1_non_ranked: int = count_nonzero(mem == -1)
 
             for el_2 in range(el_1 + 1, nb_elem):
-                # nb of input rankings such that e1 and e2 both non-ranked
-                e1_e2_non_ranked: int = count_nonzero(mem + positions[el_2] == -2)
-                # nb of input rankings such that e1 and e2 have same position, or both non-ranked
-                e1_e2_same_pos: int = count_nonzero(mem == positions[el_2])
-                # nb of input rankings such that e2 is non-ranked
-                e2_non_ranked: int = count_nonzero(positions[el_2] == -1)
-                # nb of input rankings such that e1 < e2 or e1 is non-ranked
-                e1_bef_e2_or_missing: int = count_nonzero(mem < positions[el_2])
+                if weights is not None:
+                    # count frequencies weighted by ranking importance
+                    el1_l_el2 = (mem < positions[el_2]) 
+                    el1_in_r = (mem != -1)
+                    el2_in_r = (positions[el_2] != -1)
+                    el2_l_el1 = (positions[el_2] < mem )
+                    # x < y, x > y, x and y are tied, x is the only ranked, y is the only ranked, x and y are non-ranked
+                    relative_positions = array([
+                        vdot(weights, el1_l_el2 & el1_in_r),
+                        vdot(weights, el2_l_el1 & el2_in_r),
+                        vdot(weights, ~(el1_l_el2 | el1_in_r) & el1_in_r & el2_in_r),
+                        vdot(weights, el1_in_r & ~el2_in_r),
+                        vdot(weights, el2_in_r & ~el1_in_r),
+                        vdot(weights, ~(el1_in_r | el2_in_r))
+                    ])
 
-                # vector that contains for the two elements x and y the number of rankings such that respectively:
-                # x < y, x > y, x and y are tied, x is the only ranked, y is the only ranked, x and y are non-ranked
-                relative_positions: ndarray = array([e1_bef_e2_or_missing - e1_non_ranked + e1_e2_non_ranked,
-                                                     nb_rankings - e1_bef_e2_or_missing - e1_e2_same_pos - e2_non_ranked
-                                                     + e1_e2_non_ranked,
-                                                     e1_e2_same_pos - e1_e2_non_ranked,
-                                                     e2_non_ranked - e1_e2_non_ranked,
-                                                     e1_non_ranked - e1_e2_non_ranked,
-                                                     e1_e2_non_ranked])
-
+                else:
+                    # nb of input rankings such that e1 and e2 both non-ranked
+                    e1_e2_non_ranked: int = count_nonzero(mem + positions[el_2] == -2)
+                    # nb of input rankings such that e1 and e2 have same position, or both non-ranked
+                    e1_e2_same_pos: int = count_nonzero(mem == positions[el_2])
+                    # nb of input rankings such that e2 is non-ranked
+                    e2_non_ranked: int = count_nonzero(positions[el_2] == -1)
+                    # nb of input rankings such that e1 < e2 or e1 is non-ranked
+                    e1_bef_e2_or_missing: int = count_nonzero(mem < positions[el_2])
+    
+                    # vector that contains for the two elements x and y the number of rankings such that respectively:
+                    # x < y, x > y, x and y are tied, x is the only ranked, y is the only ranked, x and y are non-ranked
+                    relative_positions: ndarray = array([e1_bef_e2_or_missing - e1_non_ranked + e1_e2_non_ranked,
+                                                         nb_rankings - e1_bef_e2_or_missing - e1_e2_same_pos - e2_non_ranked
+                                                         + e1_e2_non_ranked,
+                                                         e1_e2_same_pos - e1_e2_non_ranked,
+                                                         e2_non_ranked - e1_e2_non_ranked,
+                                                         e1_non_ranked - e1_e2_non_ranked,
+                                                         e1_e2_non_ranked])
+    
                 # cost to place e1 before, after, or tied with e2 in a consensus ranking within a Kemeny prism
                 put_before: float = float(vdot(relative_positions, cost_before))
                 put_after: float = float(vdot(relative_positions, cost_after))
@@ -117,7 +135,7 @@ class PairwiseBasedAlgorithm:
         return graph_of_elements, matrix, robust_arcs
 
     @staticmethod
-    def graph_of_elements(positions: ndarray, scoring_scheme: ScoringScheme) -> Tuple[Graph, ndarray]:
+    def graph_of_elements(positions: ndarray, scoring_scheme: ScoringScheme, weights=None) -> Tuple[Graph, ndarray]:
         """
         Compute the graph of elements, the cost of pairwise relative positions and the set of robust arcs defined in the
         Future Generation Computer Systems article (as mentioned in the Class docstring)
@@ -141,7 +159,7 @@ class PairwiseBasedAlgorithm:
         arcs: List[Tuple[int, int]] = []
 
         matrix: ndarray = PairwiseBasedAlgorithm.pairwise_cost_matrix_generic(
-            positions, scoring_scheme, PairwiseBasedAlgorithm._fill_graph, arcs)
+            positions, scoring_scheme, PairwiseBasedAlgorithm._fill_graph, arcs, weights)
 
         # arcs should be added all at once, the impact on performances is clear
         graph_of_elements.add_edges(arcs)
