@@ -30,7 +30,8 @@ class ExactAlgorithmPulp(RankAggAlgorithm, PairwiseBasedAlgorithm):
             dataset: Dataset,
             scoring_scheme: ScoringScheme,
             return_at_most_one_ranking=False,
-            bench_mode=False
+            bench_mode=False,
+            weights=None
     ) -> Consensus:
         """
         :param dataset: A dataset containing the rankings to aggregate
@@ -56,7 +57,7 @@ class ExactAlgorithmPulp(RankAggAlgorithm, PairwiseBasedAlgorithm):
         positions: ndarray = dataset.get_positions()
 
         # get the graph of elements and the score matrix
-        graph, cost_matrix = ExactAlgorithmPulp.graph_of_elements(positions, scoring_scheme)
+        graph, cost_matrix = ExactAlgorithmPulp.graph_of_elements(positions, scoring_scheme,weights)
 
         # values of penalty associated to each true pulp variable
         my_values: List[float] = []
